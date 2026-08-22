@@ -43,6 +43,13 @@
   #panel .body { padding:16px; overflow:auto; flex:1; }
   .section { margin-bottom:22px; }
   .section h3 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 10px; }
+  .yearhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .yearhead h3 { margin:0; }
+  .yearbtns { display:flex; gap:6px; }
+  .mini { font-size:11px; font-weight:600; color:var(--muted); background:#0b1526; border:1px solid var(--line); border-radius:7px; padding:3px 9px; cursor:pointer; }
+  .mini:active { transform:scale(.96); }
+  .yearlist { max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:2px; }
+  .yearlist .filter { margin-bottom:0; }
   .stats { display:flex; gap:10px; }
   .stat { flex:1; background:#0b1526; border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; }
   .stat .n { font-size:22px; font-weight:800; }
@@ -150,6 +157,17 @@
       <label class="filter"><input type="checkbox" id="flt-bike" checked><span class="swatch" style="background:#ef4444"></span><span class="lbl">Bici</span><span class="cnt" id="cnt-bike">0</span></label>
       <label class="filter"><input type="checkbox" id="flt-swim" checked><span class="swatch" style="background:#0ea5e9"></span><span class="lbl">Natació</span><span class="cnt" id="cnt-swim">0</span></label>
       <label class="filter"><input type="checkbox" id="flt-other" checked><span class="swatch" style="background:#a1a1aa"></span><span class="lbl">Altres</span><span class="cnt" id="cnt-other">0</span></label>
+    </div>
+
+    <div class="section">
+      <div class="yearhead">
+        <h3>Anys</h3>
+        <div class="yearbtns">
+          <button id="yrAll" class="mini" type="button">Tots</button>
+          <button id="yrNone" class="mini" type="button">Cap</button>
+        </div>
+      </div>
+      <div id="yearFilters" class="yearlist"><div class="small">Importa activitats per veure els anys.</div></div>
     </div>
 
     <div class="section">

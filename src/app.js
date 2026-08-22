@@ -308,9 +308,9 @@
   }
 
   // ---------------- Map ----------------
-  let map, glLayers, filterState;
+  let map, glLayers, filterState, yearState = {};
   let allActivities = [];
-  let polyLines = [], dotMarkers = [], curWeight = 3.5;
+  let polyLines = [], dotMarkers = [], features = [], curWeight = 3.5;
 
   function weightForZoom(z) {
     if (z <= 4) return 5.5;
@@ -358,9 +358,11 @@
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+  function yearOf(a) { return a.time ? String(new Date(a.time).getFullYear()) : 'Sense data'; }
+
   function renderActivities(activities, fit) {
     for (const c of CAT_ORDER) glLayers[c].clearLayers();
-    polyLines = []; dotMarkers = [];
+    polyLines = []; dotMarkers = []; features = [];
     curWeight = weightForZoom(map.getZoom());
     const r = dotRadiusForZoom(map.getZoom());
     const gb = L.latLngBounds([]);
@@ -378,16 +380,25 @@
       dot.bindPopup(popupHtml(a));
       glLayers[a.cat].addLayer(dot);
       dotMarkers.push(dot);
+      features.push({ cat: a.cat, year: yearOf(a), pl, dot });
       gb.extend(pl.getBounds());
     }
     if (fit && gb.isValid()) map.fitBounds(gb, { padding: [30, 30] });
     updateStats(activities);
   }
 
+  // show a feature only when BOTH its category and its year are enabled
   function applyFilter() {
-    for (const c of CAT_ORDER) {
-      if (filterState[c]) { if (!map.hasLayer(glLayers[c])) glLayers[c].addTo(map); }
-      else { if (map.hasLayer(glLayers[c])) map.removeLayer(glLayers[c]); }
+    for (const f of features) {
+      const vis = filterState[f.cat] && (yearState[f.year] !== false);
+      const grp = glLayers[f.cat];
+      if (vis) {
+        if (!grp.hasLayer(f.pl)) grp.addLayer(f.pl);
+        if (!grp.hasLayer(f.dot)) grp.addLayer(f.dot);
+      } else {
+        if (grp.hasLayer(f.pl)) grp.removeLayer(f.pl);
+        if (grp.hasLayer(f.dot)) grp.removeLayer(f.dot);
+      }
     }
   }
 
@@ -408,11 +419,45 @@
     allActivities = await idbGetAll('activities');
     allActivities.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
     renderActivities(allActivities, fit);
+    buildYearFilters(allActivities);
     applyFilter();
     document.getElementById('emptyState').style.display = allActivities.length ? 'none' : 'flex';
     const lastImport = await idbGet('meta', 'lastImport');
     const li = document.getElementById('lastImport');
     if (li) li.textContent = lastImport ? 'Última importació: ' + fmtDate(lastImport) : '';
+  }
+
+  // build the per-year checkboxes from the imported activities
+  function buildYearFilters(activities) {
+    const cont = document.getElementById('yearFilters');
+    if (!cont) return;
+    const counts = {};
+    for (const a of activities) { const y = yearOf(a); counts[y] = (counts[y] || 0) + 1; }
+    const years = Object.keys(counts).sort((a, b) => {
+      if (a === 'Sense data') return 1;
+      if (b === 'Sense data') return -1;
+      return Number(b) - Number(a);
+    });
+    // drop stale years, default new ones to visible
+    for (const k of Object.keys(yearState)) if (!(k in counts)) delete yearState[k];
+    for (const y of years) if (yearState[y] === undefined) yearState[y] = true;
+
+    if (!years.length) { cont.innerHTML = '<div class="small">Importa activitats per veure els anys.</div>'; return; }
+    cont.innerHTML = '';
+    for (const y of years) {
+      const label = document.createElement('label');
+      label.className = 'filter';
+      label.innerHTML = `<input type="checkbox" data-year="${y}" ${yearState[y] !== false ? 'checked' : ''}>` +
+        `<span class="lbl">${y}</span><span class="cnt">${counts[y]}</span>`;
+      cont.appendChild(label);
+    }
+  }
+
+  function setAllYears(on) {
+    for (const k of Object.keys(yearState)) yearState[k] = on;
+    const cont = document.getElementById('yearFilters');
+    if (cont) cont.querySelectorAll('input[data-year]').forEach((cb) => { cb.checked = on; });
+    applyFilter();
   }
 
   // progress + toast
@@ -441,11 +486,24 @@
     document.getElementById('btnImportEmpty').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileInput.value = ''; });
 
-    // filters
+    // category filters
     for (const c of CAT_ORDER) {
       const cb = document.getElementById('flt-' + c);
       if (cb) cb.addEventListener('change', () => { filterState[c] = cb.checked; applyFilter(); });
     }
+
+    // year filters (delegated: the checkboxes are rebuilt on each import)
+    const yearCont = document.getElementById('yearFilters');
+    if (yearCont) yearCont.addEventListener('change', (e) => {
+      if (e.target.matches('input[data-year]')) {
+        yearState[e.target.dataset.year] = e.target.checked;
+        applyFilter();
+      }
+    });
+    const yrAll = document.getElementById('yrAll');
+    const yrNone = document.getElementById('yrNone');
+    if (yrAll) yrAll.addEventListener('click', () => setAllYears(true));
+    if (yrNone) yrNone.addEventListener('click', () => setAllYears(false));
 
     document.getElementById('btnClear').addEventListener('click', async () => {
       if (!confirm('Segur que vols esborrar totes les activitats importades?')) return;
@@ -490,6 +548,7 @@
       initMap();
       wire();
       await loadAndRender(true);
+      window.__visibleLayers = () => { let n = 0; for (const c of CAT_ORDER) n += glLayers[c].getLayers().length; return n; };
     } catch (e) {
       console.error(e);
       alert('Hi ha hagut un error engegant l\'app: ' + e.message);

@@ -704,6 +704,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
   #panel .body { padding:16px; overflow:auto; flex:1; }
   .section { margin-bottom:22px; }
   .section h3 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 10px; }
+  .yearhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .yearhead h3 { margin:0; }
+  .yearbtns { display:flex; gap:6px; }
+  .mini { font-size:11px; font-weight:600; color:var(--muted); background:#0b1526; border:1px solid var(--line); border-radius:7px; padding:3px 9px; cursor:pointer; }
+  .mini:active { transform:scale(.96); }
+  .yearlist { max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:2px; }
+  .yearlist .filter { margin-bottom:0; }
   .stats { display:flex; gap:10px; }
   .stat { flex:1; background:#0b1526; border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; }
   .stat .n { font-size:22px; font-weight:800; }
@@ -811,6 +818,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
       <label class="filter"><input type="checkbox" id="flt-bike" checked><span class="swatch" style="background:#ef4444"></span><span class="lbl">Bici</span><span class="cnt" id="cnt-bike">0</span></label>
       <label class="filter"><input type="checkbox" id="flt-swim" checked><span class="swatch" style="background:#0ea5e9"></span><span class="lbl">Natació</span><span class="cnt" id="cnt-swim">0</span></label>
       <label class="filter"><input type="checkbox" id="flt-other" checked><span class="swatch" style="background:#a1a1aa"></span><span class="lbl">Altres</span><span class="cnt" id="cnt-other">0</span></label>
+    </div>
+
+    <div class="section">
+      <div class="yearhead">
+        <h3>Anys</h3>
+        <div class="yearbtns">
+          <button id="yrAll" class="mini" type="button">Tots</button>
+          <button id="yrNone" class="mini" type="button">Cap</button>
+        </div>
+      </div>
+      <div id="yearFilters" class="yearlist"><div class="small">Importa activitats per veure els anys.</div></div>
     </div>
 
     <div class="section">
@@ -1165,9 +1183,9 @@ buffer/index.js:
   }
 
   // ---------------- Map ----------------
-  let map, glLayers, filterState;
+  let map, glLayers, filterState, yearState = {};
   let allActivities = [];
-  let polyLines = [], dotMarkers = [], curWeight = 3.5;
+  let polyLines = [], dotMarkers = [], features = [], curWeight = 3.5;
 
   function weightForZoom(z) {
     if (z <= 4) return 5.5;
@@ -1215,9 +1233,11 @@ buffer/index.js:
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+  function yearOf(a) { return a.time ? String(new Date(a.time).getFullYear()) : 'Sense data'; }
+
   function renderActivities(activities, fit) {
     for (const c of CAT_ORDER) glLayers[c].clearLayers();
-    polyLines = []; dotMarkers = [];
+    polyLines = []; dotMarkers = []; features = [];
     curWeight = weightForZoom(map.getZoom());
     const r = dotRadiusForZoom(map.getZoom());
     const gb = L.latLngBounds([]);
@@ -1235,16 +1255,25 @@ buffer/index.js:
       dot.bindPopup(popupHtml(a));
       glLayers[a.cat].addLayer(dot);
       dotMarkers.push(dot);
+      features.push({ cat: a.cat, year: yearOf(a), pl, dot });
       gb.extend(pl.getBounds());
     }
     if (fit && gb.isValid()) map.fitBounds(gb, { padding: [30, 30] });
     updateStats(activities);
   }
 
+  // show a feature only when BOTH its category and its year are enabled
   function applyFilter() {
-    for (const c of CAT_ORDER) {
-      if (filterState[c]) { if (!map.hasLayer(glLayers[c])) glLayers[c].addTo(map); }
-      else { if (map.hasLayer(glLayers[c])) map.removeLayer(glLayers[c]); }
+    for (const f of features) {
+      const vis = filterState[f.cat] && (yearState[f.year] !== false);
+      const grp = glLayers[f.cat];
+      if (vis) {
+        if (!grp.hasLayer(f.pl)) grp.addLayer(f.pl);
+        if (!grp.hasLayer(f.dot)) grp.addLayer(f.dot);
+      } else {
+        if (grp.hasLayer(f.pl)) grp.removeLayer(f.pl);
+        if (grp.hasLayer(f.dot)) grp.removeLayer(f.dot);
+      }
     }
   }
 
@@ -1265,11 +1294,45 @@ buffer/index.js:
     allActivities = await idbGetAll('activities');
     allActivities.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
     renderActivities(allActivities, fit);
+    buildYearFilters(allActivities);
     applyFilter();
     document.getElementById('emptyState').style.display = allActivities.length ? 'none' : 'flex';
     const lastImport = await idbGet('meta', 'lastImport');
     const li = document.getElementById('lastImport');
     if (li) li.textContent = lastImport ? 'Última importació: ' + fmtDate(lastImport) : '';
+  }
+
+  // build the per-year checkboxes from the imported activities
+  function buildYearFilters(activities) {
+    const cont = document.getElementById('yearFilters');
+    if (!cont) return;
+    const counts = {};
+    for (const a of activities) { const y = yearOf(a); counts[y] = (counts[y] || 0) + 1; }
+    const years = Object.keys(counts).sort((a, b) => {
+      if (a === 'Sense data') return 1;
+      if (b === 'Sense data') return -1;
+      return Number(b) - Number(a);
+    });
+    // drop stale years, default new ones to visible
+    for (const k of Object.keys(yearState)) if (!(k in counts)) delete yearState[k];
+    for (const y of years) if (yearState[y] === undefined) yearState[y] = true;
+
+    if (!years.length) { cont.innerHTML = '<div class="small">Importa activitats per veure els anys.</div>'; return; }
+    cont.innerHTML = '';
+    for (const y of years) {
+      const label = document.createElement('label');
+      label.className = 'filter';
+      label.innerHTML = `<input type="checkbox" data-year="${y}" ${yearState[y] !== false ? 'checked' : ''}>` +
+        `<span class="lbl">${y}</span><span class="cnt">${counts[y]}</span>`;
+      cont.appendChild(label);
+    }
+  }
+
+  function setAllYears(on) {
+    for (const k of Object.keys(yearState)) yearState[k] = on;
+    const cont = document.getElementById('yearFilters');
+    if (cont) cont.querySelectorAll('input[data-year]').forEach((cb) => { cb.checked = on; });
+    applyFilter();
   }
 
   // progress + toast
@@ -1298,11 +1361,24 @@ buffer/index.js:
     document.getElementById('btnImportEmpty').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileInput.value = ''; });
 
-    // filters
+    // category filters
     for (const c of CAT_ORDER) {
       const cb = document.getElementById('flt-' + c);
       if (cb) cb.addEventListener('change', () => { filterState[c] = cb.checked; applyFilter(); });
     }
+
+    // year filters (delegated: the checkboxes are rebuilt on each import)
+    const yearCont = document.getElementById('yearFilters');
+    if (yearCont) yearCont.addEventListener('change', (e) => {
+      if (e.target.matches('input[data-year]')) {
+        yearState[e.target.dataset.year] = e.target.checked;
+        applyFilter();
+      }
+    });
+    const yrAll = document.getElementById('yrAll');
+    const yrNone = document.getElementById('yrNone');
+    if (yrAll) yrAll.addEventListener('click', () => setAllYears(true));
+    if (yrNone) yrNone.addEventListener('click', () => setAllYears(false));
 
     document.getElementById('btnClear').addEventListener('click', async () => {
       if (!confirm('Segur que vols esborrar totes les activitats importades?')) return;
@@ -1347,6 +1423,7 @@ buffer/index.js:
       initMap();
       wire();
       await loadAndRender(true);
+      window.__visibleLayers = () => { let n = 0; for (const c of CAT_ORDER) n += glLayers[c].getLayers().length; return n; };
     } catch (e) {
       console.error(e);
       alert('Hi ha hagut un error engegant l\'app: ' + e.message);
