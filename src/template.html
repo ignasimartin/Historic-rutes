@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Els Meus Tracks">
+<title>Els Meus Tracks</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f172a'/%3E%3Cpath d='M25 70 L45 35 L60 55 L78 28' fill='none' stroke='%2322c55e' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='78' cy='28' r='7' fill='%23ef4444'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230f172a'/%3E%3Cpath d='M25 70 L45 35 L60 55 L78 28' fill='none' stroke='%2322c55e' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='78' cy='28' r='7' fill='%23ef4444'/%3E%3C/svg%3E">
+<style>/*LEAFLET_CSS*/</style>
+<style>
+  :root { --bg:#0f172a; --panel:#111c33; --line:#243149; --txt:#e2e8f0; --muted:#94a3b8; --accent:#22c55e; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:var(--txt); background:var(--bg); overscroll-behavior:none; }
+  #map { position:absolute; inset:0; background:#0b1220; }
+  .leaflet-container { background:#0b1220; font:inherit; }
+
+  /* Top bar */
+  #topbar { position:absolute; top:0; left:0; right:0; z-index:1000; display:flex; align-items:center; gap:8px;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px 8px 10px; background:linear-gradient(#0f172aee,#0f172a00); pointer-events:none; }
+  #topbar .brand { pointer-events:auto; display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; letter-spacing:.2px; }
+  #topbar .brand svg { width:26px; height:26px; flex:0 0 auto; }
+  #topbar .spacer { flex:1; }
+  .btn { pointer-events:auto; cursor:pointer; border:1px solid var(--line); background:#1e293bcc; color:var(--txt);
+    backdrop-filter:blur(6px); border-radius:10px; padding:9px 12px; font-size:14px; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .btn:active { transform:scale(.97); }
+  .btn.primary { background:var(--accent); color:#04210f; border-color:transparent; }
+  .net { pointer-events:auto; font-size:11px; padding:4px 8px; border-radius:20px; font-weight:600; }
+  .net.on { background:#052e16; color:#4ade80; }
+  .net.off { background:#3f1d1d; color:#fca5a5; }
+
+  /* Panel */
+  #panel { position:absolute; z-index:1200; top:0; right:0; height:100%; width:min(90vw,360px);
+    background:var(--panel); border-left:1px solid var(--line); transform:translateX(105%); transition:transform .25s ease;
+    display:flex; flex-direction:column; box-shadow:-8px 0 30px #0008; }
+  #panel.open { transform:translateX(0); }
+  #panel header { display:flex; align-items:center; justify-content:space-between; padding:calc(env(safe-area-inset-top) + 14px) 16px 12px; border-bottom:1px solid var(--line); }
+  #panel header h2 { margin:0; font-size:16px; }
+  #panel .body { padding:16px; overflow:auto; flex:1; }
+  .section { margin-bottom:22px; }
+  .section h3 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 10px; }
+  .stats { display:flex; gap:10px; }
+  .stat { flex:1; background:#0b1526; border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; }
+  .stat .n { font-size:22px; font-weight:800; }
+  .stat .l { font-size:11px; color:var(--muted); margin-top:2px; }
+  .filter { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line); border-radius:10px; margin-bottom:8px; background:#0b1526; }
+  .filter input { width:18px; height:18px; accent-color:var(--accent); }
+  .filter .swatch { width:16px; height:16px; border-radius:4px; flex:0 0 auto; }
+  .filter .lbl { flex:1; font-size:14px; }
+  .filter .cnt { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .muted { color:var(--muted); }
+  .small { font-size:12px; color:var(--muted); line-height:1.5; }
+  .btn.block { width:100%; justify-content:center; margin-bottom:8px; }
+  .btn.ghost { background:#0b1526; }
+  .btn.danger { background:#0b1526; color:#fca5a5; border-color:#4c1d1d; }
+
+  /* Empty state */
+  #emptyState { position:absolute; inset:0; z-index:900; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; text-align:center; padding:30px; background:radial-gradient(circle at 50% 40%, #16223d, #0b1220); }
+  #emptyState .ico { font-size:44px; }
+  #emptyState h1 { margin:0; font-size:20px; }
+  #emptyState p { margin:0; max-width:340px; color:var(--muted); font-size:14px; line-height:1.6; }
+
+  /* Progress */
+  #progress { position:absolute; z-index:1500; left:50%; bottom:calc(env(safe-area-inset-bottom) + 20px); transform:translateX(-50%);
+    width:min(88vw,360px); background:#0b1526; border:1px solid var(--line); border-radius:14px; padding:12px 14px; display:none; box-shadow:0 10px 30px #0009; }
+  #progress .row { display:flex; justify-content:space-between; font-size:13px; margin-bottom:8px; }
+  #progressTrack { height:6px; background:#1e293b; border-radius:6px; overflow:hidden; }
+  #progressBar { height:100%; width:0; background:var(--accent); transition:width .2s; }
+
+  /* Toast */
+  #toast { position:absolute; z-index:1600; left:50%; bottom:calc(env(safe-area-inset-bottom) + 20px); transform:translate(-50%,20px);
+    background:#020617; color:#e2e8f0; border:1px solid var(--line); padding:11px 16px; border-radius:12px; font-size:13px;
+    max-width:88vw; text-align:center; opacity:0; pointer-events:none; transition:.25s; }
+  #toast.show { opacity:1; transform:translate(-50%,0); }
+
+  /* Dropzone */
+  #dropzone { position:absolute; inset:0; z-index:2000; display:none; align-items:center; justify-content:center;
+    background:#0f172ae6; border:3px dashed var(--accent); font-size:18px; font-weight:700; }
+  #dropzone.show { display:flex; }
+
+  /* Legend (bottom-left compact) */
+  #legend { position:absolute; z-index:800; left:10px; bottom:calc(env(safe-area-inset-bottom) + 12px);
+    background:#0b1526cc; backdrop-filter:blur(6px); border:1px solid var(--line); border-radius:12px; padding:8px 10px; font-size:12px; }
+  #legend .li { display:flex; align-items:center; gap:7px; margin:3px 0; }
+  #legend .swatch { width:12px; height:12px; border-radius:3px; }
+
+  .pop { font-size:13px; line-height:1.5; }
+  .pop .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .leaflet-popup-content-wrapper { background:#0b1526; color:#e2e8f0; border:1px solid var(--line); }
+  .leaflet-popup-tip { background:#0b1526; }
+  .leaflet-bar a { background:#111c33; color:#e2e8f0; border-color:#243149; }
+  .leaflet-bar a:hover { background:#1e293b; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#111c33"/><path d="M25 70 L45 35 L60 55 L78 28" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="28" r="7" fill="#ef4444"/></svg>
+    <span>Els Meus Tracks</span>
+  </div>
+  <div class="spacer"></div>
+  <span id="netStatus" class="net on">En línia</span>
+  <button id="btnPanel" class="btn" aria-label="Menú">☰</button>
+</div>
+
+<div id="legend">
+  <div class="li"><span class="swatch" style="background:#22c55e"></span>Córrer / Caminar / Hiking</div>
+  <div class="li"><span class="swatch" style="background:#ef4444"></span>Bici</div>
+  <div class="li"><span class="swatch" style="background:#0ea5e9"></span>Natació</div>
+  <div class="li"><span class="swatch" style="background:#a1a1aa"></span>Altres</div>
+</div>
+
+<div id="emptyState">
+  <div class="ico">🗺️</div>
+  <h1>Encara no hi ha activitats</h1>
+  <p>Importa els fitxers que has exportat de Garmin Connect i Suunto (accepta <b>.gpx</b>, <b>.tcx</b>, <b>.fit</b> i fins i tot els <b>.zip</b> sencers de l'exportació). Es guarden al teu telèfon: només ho has de fer un cop.</p>
+  <button id="btnImportEmpty" class="btn primary">Importar activitats</button>
+</div>
+
+<aside id="panel">
+  <header>
+    <h2>Els Meus Tracks</h2>
+    <button id="btnClosePanel" class="btn ghost" aria-label="Tancar">✕</button>
+  </header>
+  <div class="body">
+    <div class="section">
+      <div class="stats">
+        <div class="stat"><div class="n" id="statTotal">0</div><div class="l">activitats</div></div>
+        <div class="stat"><div class="n" id="statKm">0</div><div class="l">km totals</div></div>
+      </div>
+      <div class="small" id="lastImport" style="margin-top:8px"></div>
+    </div>
+
+    <div class="section">
+      <h3>Activitats</h3>
+      <button id="btnImport" class="btn primary block">Importar fitxers (.gpx/.fit/.zip)</button>
+      <div class="small">També pots arrossegar els fitxers a sobre de la finestra.</div>
+    </div>
+
+    <div class="section">
+      <h3>Mostrar al mapa</h3>
+      <label class="filter"><input type="checkbox" id="flt-foot" checked><span class="swatch" style="background:#22c55e"></span><span class="lbl">Córrer / Caminar / Hiking</span><span class="cnt" id="cnt-foot">0</span></label>
+      <label class="filter"><input type="checkbox" id="flt-bike" checked><span class="swatch" style="background:#ef4444"></span><span class="lbl">Bici</span><span class="cnt" id="cnt-bike">0</span></label>
+      <label class="filter"><input type="checkbox" id="flt-swim" checked><span class="swatch" style="background:#0ea5e9"></span><span class="lbl">Natació</span><span class="cnt" id="cnt-swim">0</span></label>
+      <label class="filter"><input type="checkbox" id="flt-other" checked><span class="swatch" style="background:#a1a1aa"></span><span class="lbl">Altres</span><span class="cnt" id="cnt-other">0</span></label>
+    </div>
+
+    <div class="section">
+      <h3>Dades</h3>
+      <button id="btnClear" class="btn danger block">Esborrar totes les activitats</button>
+      <div class="small">Les teves activitats es guarden només en aquest telèfon. El mapa de fons es carrega d'internet.</div>
+    </div>
+  </div>
+</aside>
+
+<div id="dropzone">Deixa anar els fitxers per importar-los</div>
+
+<div id="progress">
+  <div class="row"><span id="progressLabel">Processant…</span></div>
+  <div id="progressTrack"><div id="progressBar"></div></div>
+</div>
+
+<div id="toast"></div>
+
+<input type="file" id="fileInput" accept=".gpx,.tcx,.fit,.zip,.gz" multiple style="display:none">
+
+<script>/*LEAFLET_JS*/</script>
+<script>/*FFLATE_JS*/</script>
+<script>/*FIT_JS*/</script>
+<script>/*APP_JS*/</script>
+</body>
+</html>
