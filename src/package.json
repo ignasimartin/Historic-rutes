@@ -1,0 +1,17 @@
+{
+  "name": "historic-rutes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visor de l'historic de tracks de Garmin i Suunto en un mapa",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "fit-file-parser": "^1.21.0",
+    "leaflet": "^1.9.4"
+  }
+}

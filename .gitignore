@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Build artifacts (l'app final es genera amb: cd src && npm install && npm run build)
+src/fitbundle.js
+src/fitentry.js
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log
