@@ -404,7 +404,6 @@
       gb.extend(pl.getBounds());
     }
     if (fit && gb.isValid()) map.fitBounds(gb, { padding: [30, 30] });
-    updateStats(activities);
   }
 
   // show a feature only when BOTH its category and its year are enabled
@@ -420,19 +419,37 @@
         if (grp.hasLayer(f.dot)) grp.removeLayer(f.dot);
       }
     }
+    recomputeCounts();
   }
 
-  // ---------------- Stats & UI ----------------
-  function updateStats(activities) {
-    const counts = { swim: 0, bike: 0, foot: 0, other: 0 };
-    let km = 0;
-    for (const a of activities) { counts[a.cat] = (counts[a.cat] || 0) + 1; km += (a.dist || 0); }
-    document.getElementById('statTotal').textContent = activities.length;
-    document.getElementById('statKm').textContent = Math.round(km).toLocaleString('ca-ES');
+  // ---------------- Stats & UI (comptadors dinàmics / facetats) ----------------
+  // - Recompte per categoria: activitats d'aquella categoria dins dels ANYS seleccionats.
+  // - Recompte per any: activitats d'aquell any dins de les CATEGORIES seleccionades.
+  // - Total activitats i km: activitats que passen ELS DOS filtres alhora.
+  function recomputeCounts() {
+    const catCounts = { swim: 0, bike: 0, foot: 0, other: 0 };
+    const yearCounts = {};
+    let total = 0, km = 0;
+    for (const a of allActivities) {
+      const y = yearOf(a);
+      const catOn = filterState[a.cat] !== false;
+      const yearOn = yearState[y] !== false;
+      if (yearOn) catCounts[a.cat] = (catCounts[a.cat] || 0) + 1;
+      if (catOn) yearCounts[y] = (yearCounts[y] || 0) + 1;
+      if (catOn && yearOn) { total += 1; km += (a.dist || 0); }
+    }
+    const st = document.getElementById('statTotal');
+    const sk = document.getElementById('statKm');
+    if (st) st.textContent = total;
+    if (sk) sk.textContent = Math.round(km).toLocaleString('ca-ES');
     for (const c of CAT_ORDER) {
       const el = document.getElementById('cnt-' + c);
-      if (el) el.textContent = counts[c] || 0;
+      if (el) el.textContent = catCounts[c] || 0;
     }
+    const cont = document.getElementById('yearFilters');
+    if (cont) cont.querySelectorAll('[data-yearcnt]').forEach((el) => {
+      el.textContent = yearCounts[el.getAttribute('data-yearcnt')] || 0;
+    });
   }
 
   async function loadAndRender(fit) {
@@ -468,7 +485,7 @@
       const label = document.createElement('label');
       label.className = 'filter';
       label.innerHTML = `<input type="checkbox" data-year="${y}" ${yearState[y] !== false ? 'checked' : ''}>` +
-        `<span class="lbl">${y}</span><span class="cnt">${counts[y]}</span>`;
+        `<span class="lbl">${y}</span><span class="cnt" data-yearcnt="${y}">${counts[y]}</span>`;
       cont.appendChild(label);
     }
   }
