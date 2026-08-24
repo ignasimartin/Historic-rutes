@@ -14,11 +14,13 @@
   };
   const CAT_ORDER = ['foot', 'bike', 'swim', 'other'];
 
-  function categorize(sport) {
-    const s = (sport || '').toString().toLowerCase();
-    if (/swim|nata|nedar/.test(s)) return 'swim';
-    if (/cycl|bike|bik|biking|velo|ciclis|btt|mtb|road_bik|ebike/.test(s)) return 'bike';
-    if (/run|walk|hik|jog|trail|foot|sender|cam|trek|trek|mountaineer|marx/.test(s)) return 'foot';
+  // Categoritza a partir del tipus del fitxer i, com a reserva, del nom del fitxer
+  // (Suunto no guarda el tipus dins del .gpx/.fit, però sí al nom: "...cycling.gpx").
+  function categorize(sport, hint) {
+    const s = ((sport || '') + ' ' + (hint || '')).toString().toLowerCase();
+    if (/swim|nata|nedar|piscina|openwater|open_water|nataci/.test(s)) return 'swim';
+    if (/cycl|bike|biking|velo|ciclis|\bbtt\b|\bmtb\b|road_?bik|ebike|bicicl|spinning/.test(s)) return 'bike';
+    if (/run|walk|hik|jog|trail|footing|sender|camin|trek|mountaineer|marx|excurs|passej|nordic/.test(s)) return 'foot';
     return 'other';
   }
 
@@ -107,11 +109,13 @@
     return out;
   }
 
-  function activityId(time, cat, pts) {
+  // Id estable per deduplicar (mateixa activitat en .gpx i .fit → mateix id).
+  // No inclou la categoria, així si millora la classificació i tornes a importar, s'actualitza.
+  function activityId(time, pts) {
     const t = time ? new Date(time).getTime() : 0;
     const tmin = Math.round(t / 60000);
     const fp = pts[0] || [0, 0];
-    return cat + '_' + tmin + '_' + fp[0].toFixed(3) + '_' + fp[1].toFixed(3);
+    return tmin + '_' + fp[0].toFixed(3) + '_' + fp[1].toFixed(3);
   }
 
   function fmtDate(iso) {
@@ -150,7 +154,10 @@
       const tEl = trk.getElementsByTagName('type')[0];
       if (tEl) type = tEl.textContent;
       if (!type) type = metaType;
-      out.push({ type, points: pts, time });
+      let name = '';
+      const nEl = trk.getElementsByTagName('name')[0];
+      if (nEl) name = nEl.textContent;
+      out.push({ type, points: pts, time, name });
     }
     return out;
   }
@@ -179,7 +186,10 @@
           }
         }
       }
-      out.push({ type: sport, points: pts, time });
+      let name = '';
+      const nEl = a.getElementsByTagName('Notes')[0];
+      if (nEl) name = nEl.textContent;
+      out.push({ type: sport, points: pts, time, name });
     }
     return out;
   }
@@ -210,7 +220,14 @@
             sport = data.sports[0].sport || '';
           }
           if (!time && data.activity && data.activity.timestamp) time = data.activity.timestamp;
-          resolve([{ type: sport, points: pts, time }]);
+          // El nom pot estar en diversos llocs segons el dispositiu (Garmin usa sport_profile_name)
+          let name = '';
+          const s0 = (data.sessions && data.sessions[0]) || {};
+          if (data.workout && data.workout[0] && data.workout[0].wkt_name) name = data.workout[0].wkt_name;
+          else if (s0.name) name = s0.name;
+          else if (s0.sport_profile_name) name = s0.sport_profile_name;
+          else if (data.sports && data.sports[0] && data.sports[0].name) name = data.sports[0].name;
+          resolve([{ type: sport, points: pts, time, name }]);
         });
       } catch (e) { resolve([]); }
     });
@@ -277,8 +294,9 @@
 
       for (const pr of parsed) {
         if (!pr.points || pr.points.length < 2) { noGps++; continue; }
-        const cat = categorize(pr.type);
-        const id = activityId(pr.time, cat, pr.points);
+        // 'name' aquí és el nom del fitxer: serveix de pista per classificar Suunto
+        const cat = categorize(pr.type, name);
+        const id = activityId(pr.time, pr.points);
         if (seen.has(id)) continue;
         seen.add(id);
         const dist = haversineTotal(pr.points);
@@ -286,6 +304,7 @@
           id,
           type: pr.type || '',
           cat,
+          name: (pr.name || '').trim(),
           time: pr.time ? new Date(pr.time).toISOString() : null,
           start: round5(pr.points[0]),
           dist: Math.round(dist * 100) / 100,
@@ -353,9 +372,10 @@
       <span class="dot" style="background:${CATS[a.cat].color}"></span>
       <b>${CATS[a.cat].label}</b><br>
       ${fmtDate(a.time)}<br>
-      ${a.type ? '<span class="muted">' + escapeHtml(a.type) + '</span> · ' : ''}${km}
+      ${a.type ? '<span class="muted">' + escapeHtml(a.type) + '</span> \u00b7 ' : ''}${km}
     </div>`;
   }
+
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
   function yearOf(a) { return a.time ? String(new Date(a.time).getFullYear()) : 'Sense data'; }
